@@ -1,0 +1,827 @@
+From 54b54b1a3c6d41248f0e671357eef8b9a8700178 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Ekkehard=20G=C3=BCmbel?=
+ <43146234+ekkeguembel@users.noreply.github.com>
+Date: Sat, 4 Oct 2025 10:06:21 +0200
+Subject: [PATCH 1/2] Update config.php
+
+---
+ Config/config.php | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/Config/config.php b/Config/config.php
+index 56fabcf..0f71e2d 100644
+--- a/Config/config.php
++++ b/Config/config.php
+@@ -3,7 +3,7 @@
+ return [
+     'name'        => 'Company Tags by Leuchtfeuer',
+     'description' => 'Provide a 2nd type of Tags which can be applied to Companies',
+-    'version'     => '1.4.0',
++    'version'     => '1.4.1',
+     'author'      => 'Leuchtfeuer Digital Marketing GmbH',
+     'services'    => [
+         'integrations' => [
+
+From c4b1946323772d5622136af1a5a94d03cd623a6e Mon Sep 17 00:00:00 2001
+From: lenonleite <lenonleite@gmail.com>
+Date: Thu, 6 Nov 2025 09:56:09 +0000
+Subject: [PATCH 2/2] - phpstan - fixcs
+
+---
+ Controller/AjaxController.php                 | 12 ++++-----
+ Controller/Api/CompanyTagApiController.php    | 10 ++++----
+ Controller/BatchCompanyTagController.php      |  4 +--
+ Controller/CompanyController.php              | 25 +++++++------------
+ Controller/CompanyTagController.php           | 15 ++++++-----
+ Event/CompanyTagsEvent.php                    | 17 ++++++++++++-
+ Event/CompanyUpdateCompanyTagsEvent.php       | 13 +++++++++-
+ EventListener/ButtonSubscriber.php            |  2 +-
+ Form/Type/CompanyTagType.php                  |  3 ++-
+ Form/Type/CustomCompanyType.php               |  4 +--
+ Form/Type/ModifyCompanyTagsType.php           |  2 +-
+ Model/CompanyTagModel.php                     | 10 ++++++--
+ .../Controller/AjaxControllerTest.php         |  3 ---
+ .../Api/CompanyTagApiControllerTest.php       | 10 +++++++-
+ .../Controller/CompanyControllerTest.php      | 16 +++++++++---
+ .../Controller/CompanyTagsControllerTest.php  | 13 +++++++---
+ .../Entity/EntityCompanyTagsTest.php          |  2 --
+ .../EventLister/CampaignSubscriberTest.php    |  4 +--
+ .../Permissions/CompanyTagPermissionsTest.php | 25 +++++++++++++------
+ 19 files changed, 118 insertions(+), 72 deletions(-)
+
+diff --git a/Controller/AjaxController.php b/Controller/AjaxController.php
+index 5fb9a74..17fd24e 100644
+--- a/Controller/AjaxController.php
++++ b/Controller/AjaxController.php
+@@ -5,7 +5,6 @@
+ use Doctrine\Persistence\ManagerRegistry;
+ use Mautic\CoreBundle\Controller\AjaxController as CommonAjaxController;
+ use Mautic\CoreBundle\Controller\AjaxLookupControllerTrait;
+-use Mautic\CoreBundle\Factory\MauticFactory;
+ use Mautic\CoreBundle\Factory\ModelFactory;
+ use Mautic\CoreBundle\Helper\CoreParametersHelper;
+ use Mautic\CoreBundle\Helper\InputHelper;
+@@ -27,7 +26,6 @@ class AjaxController extends CommonAjaxController
+     // @phpstan-ignore-next-line
+     public function __construct(
+         ManagerRegistry $doctrine,
+-        MauticFactory $factory,
+         ModelFactory $modelFactory,
+         UserHelper $userHelper,
+         CoreParametersHelper $coreParametersHelper,
+@@ -37,9 +35,9 @@ public function __construct(
+         ?RequestStack $requestStack,
+         ?CorePermissions $security,
+         private CompanyTagModel $companyTagModel,
+-        private CompanyModel $companyModel
++        private CompanyModel $companyModel,
+     ) {
+-        parent::__construct($doctrine, $factory, $modelFactory, $userHelper, $coreParametersHelper, $dispatcher, $translator, $flashBag, $requestStack, $security);
++        parent::__construct($doctrine, $modelFactory, $userHelper, $coreParametersHelper, $dispatcher, $translator, $flashBag, $requestStack, $security);
+     }
+ 
+     public function addCompanyTagsAction(Request $request): JsonResponse
+@@ -48,7 +46,7 @@ public function addCompanyTagsAction(Request $request): JsonResponse
+             return $this->accessDenied();
+         }
+ 
+-        $tags = $request->request->get('tags');
++        $tags = $request->get('tags');
+         $tags = json_decode($tags, true);
+ 
+         if (is_array($tags)) {
+@@ -90,8 +88,8 @@ public function removeCompanyCompanyTagAction(Request $request): JsonResponse
+             return $this->accessDenied();
+         }
+ 
+-        $tagId        = (int) InputHelper::clean($request->request->get('tagId'));
+-        $companyTagId = (int) InputHelper::clean($request->request->get('companyId'));
++        $tagId        = (int) InputHelper::clean($request->get('tagId'));
++        $companyTagId = (int) InputHelper::clean($request->get('companyId'));
+         if (!$tagId || !$companyTagId) {
+             return $this->sendJsonResponse(['success' => 0]);
+         }
+diff --git a/Controller/Api/CompanyTagApiController.php b/Controller/Api/CompanyTagApiController.php
+index 63016b1..dbfa06f 100644
+--- a/Controller/Api/CompanyTagApiController.php
++++ b/Controller/Api/CompanyTagApiController.php
+@@ -43,16 +43,15 @@ public function __construct(
+         ModelFactory $modelFactory,
+         EventDispatcherInterface $dispatcher,
+         CoreParametersHelper $coreParametersHelper,
+-        MauticFactory $factory,
+         private CompanyTagModel $companyTagModel,
+-        private CompanyModel $companyModel
++        private CompanyModel $companyModel,
+     ) {
+         $this->model             = $this->companyTagModel;
+         $this->entityClass       = CompanyTags::class;
+         $this->entityNameOne     = 'companytag';
+         $this->entityNameMulti   = 'companytags';
+         $this->permissionBase    = 'companytag:companytags';
+-        parent::__construct($security, $translator, $entityResultHelper, $router, $formFactory, $appVersion, $requestStack, $doctrine, $modelFactory, $dispatcher, $coreParametersHelper, $factory);
++        parent::__construct($security, $translator, $entityResultHelper, $router, $formFactory, $appVersion, $requestStack, $doctrine, $modelFactory, $dispatcher, $coreParametersHelper);
+     }
+ 
+     public function addCompanyTagToCompanyAction(Request $request, int $companyId): Response
+@@ -61,13 +60,14 @@ public function addCompanyTagToCompanyAction(Request $request, int $companyId):
+             return $this->accessDenied();
+         }
+ 
+-        $tagsId = $request->request->get('tags');
++        $tagsId = $request->get('tags');
+ 
+         if (!$companyId || !$tagsId) {
+             return $this->badRequest();
+         }
+ 
+         $company  = $this->companyModel->getEntity($companyId);
++
+         $tags     = $this->model->getRepository()->findBy(['id' => $tagsId]);
+ 
+         if (!$company || !$tags) {
+@@ -99,7 +99,7 @@ public function removeCompanyTagFromCompanyAction(Request $request, int $company
+             return $this->accessDenied();
+         }
+ 
+-        $tagsId = $request->request->get('tags');
++        $tagsId = $request->get('tags');
+ 
+         if (!$companyId || !$tagsId) {
+             return $this->badRequest();
+diff --git a/Controller/BatchCompanyTagController.php b/Controller/BatchCompanyTagController.php
+index b303211..c1d66af 100644
+--- a/Controller/BatchCompanyTagController.php
++++ b/Controller/BatchCompanyTagController.php
+@@ -6,7 +6,6 @@
+ 
+ use Doctrine\Persistence\ManagerRegistry;
+ use Mautic\CoreBundle\Controller\AbstractFormController;
+-use Mautic\CoreBundle\Factory\MauticFactory;
+ use Mautic\CoreBundle\Factory\ModelFactory;
+ use Mautic\CoreBundle\Helper\CoreParametersHelper;
+ use Mautic\CoreBundle\Helper\UserHelper;
+@@ -27,7 +26,6 @@ class BatchCompanyTagController extends AbstractFormController
+     public function __construct(
+         private CompanyTagModel $companyTagModel,
+         ManagerRegistry $doctrine,
+-        MauticFactory $factory,
+         ModelFactory $modelFactory,
+         UserHelper $userHelper,
+         CoreParametersHelper $coreParametersHelper,
+@@ -37,7 +35,7 @@ public function __construct(
+         RequestStack $requestStack,
+         CorePermissions $security,
+     ) {
+-        parent::__construct($doctrine, $factory, $modelFactory, $userHelper, $coreParametersHelper, $dispatcher, $translator, $flashBag, $requestStack, $security);
++        parent::__construct($doctrine, $modelFactory, $userHelper, $coreParametersHelper, $dispatcher, $translator, $flashBag, $requestStack, $security);
+     }
+ 
+     /**
+diff --git a/Controller/CompanyController.php b/Controller/CompanyController.php
+index e738d20..0150f21 100644
+--- a/Controller/CompanyController.php
++++ b/Controller/CompanyController.php
+@@ -3,7 +3,6 @@
+ namespace MauticPlugin\LeuchtfeuerCompanyTagsBundle\Controller;
+ 
+ use Doctrine\Persistence\ManagerRegistry;
+-use Mautic\CoreBundle\Factory\MauticFactory;
+ use Mautic\CoreBundle\Factory\ModelFactory;
+ use Mautic\CoreBundle\Factory\PageHelperFactoryInterface;
+ use Mautic\CoreBundle\Helper\CoreParametersHelper;
+@@ -37,7 +36,6 @@ public function __construct(
+         FormFactoryInterface $formFactory,
+         FormFieldHelper $fieldHelper,
+         ManagerRegistry $managerRegistry,
+-        MauticFactory $factory,
+         ModelFactory $modelFactory,
+         UserHelper $userHelper,
+         CoreParametersHelper $coreParametersHelper,
+@@ -49,7 +47,7 @@ public function __construct(
+         private CompanyTagModel $companyTagModel,
+         private Config $config,
+     ) {
+-        parent::__construct($formFactory, $fieldHelper, $managerRegistry, $factory, $modelFactory, $userHelper, $coreParametersHelper, $dispatcher, $translator, $flashBag, $requestStack, $security);
++        parent::__construct($formFactory, $fieldHelper, $managerRegistry, $modelFactory, $userHelper, $coreParametersHelper, $dispatcher, $translator, $flashBag, $requestStack, $security);
+     }
+ 
+     /**
+@@ -60,7 +58,6 @@ public function indexAction(Request $request, PageHelperFactoryInterface $pageHe
+         if (!$this->config->isPublished()) {
+             return parent::indexAction($request, $pageHelperFactory, $page);
+         }
+-
+         // set some permissions
+         $permissions = $this->security->isGranted(
+             [
+@@ -78,7 +75,6 @@ public function indexAction(Request $request, PageHelperFactoryInterface $pageHe
+         if (!$permissions['lead:leads:viewother'] && !$permissions['lead:leads:viewown']) {
+             return $this->accessDenied();
+         }
+-
+         $this->setListFilters();
+ 
+         $pageHelper = $pageHelperFactory->make('mautic.company', $page);
+@@ -93,7 +89,6 @@ public function indexAction(Request $request, PageHelperFactoryInterface $pageHe
+         if (str_contains($search, 'company-segment:')) {
+             $filter     = $this->filterByCompanySegment($search);
+         }
+-
+         $orderBy    = $request->getSession()->get('mautic.company.orderby', 'comp.companyname');
+         $orderByDir = $request->getSession()->get('mautic.company.orderbydir', 'ASC');
+         $companies  = $this->getModel('lead.company')->getEntities(
+@@ -190,7 +185,7 @@ private function filterByCompanyTag(string $search): array
+     }
+ 
+     /**
+-     * @return mixed[][]
++     * @return array<string, array<string>|string>
+      */
+     private function filterByCompanySegment(string $search): array
+     {
+@@ -215,7 +210,7 @@ private function filterByCompanySegment(string $search): array
+         if (empty($companiesIds)) {
+             return $defaultFilter;
+         }
+-
++        /** @phpstan-ignore-next-line */
+         return [
+             'force' => [
+                 [
+@@ -291,7 +286,7 @@ public function editAction(Request $request, $objectId, $ignorePost = false)
+ 
+         $action       = $this->generateUrl('mautic_company_action', ['objectAction' => 'edit', 'objectId' => $objectId]);
+         $method       = $request->getMethod();
+-        $company      = $request->request->get('company') ?? [];
++        $company      = $request->get('company') ?? [];
+ 
+         $updateSelect = 'POST' === $method
+             ? ($company['updateSelect'] ?? false)
+@@ -308,13 +303,13 @@ public function editAction(Request $request, $objectId, $ignorePost = false)
+         );
+         $companyTagsStructure = $this->customFormCompanyTags($request, $entity);
+ 
+-        // /Check for a submitted form and process it
++        // Check for a submitted form and process it
+         if (!$ignorePost && 'POST' === $method) {
+             $valid = false;
+ 
+             if (!$cancelled = $this->isFormCancelled($form)) {
+                 if ($valid = $this->isFormValid($form)) {
+-                    $data = $request->request->get('company');
++                    $data = $request->get('company');
+                     // pull the data from the form in order to apply the form's formatting
+                     foreach ($form as $f) {
+                         $data[$f->getName()] = $f->getData();
+@@ -447,7 +442,7 @@ public function newAction(Request $request, $entity = null)
+         $page         = $request->getSession()->get('mautic.company.page', 1);
+         $method       = $request->getMethod();
+         $action       = $this->generateUrl('mautic_company_action', ['objectAction' => 'new']);
+-        $company      = $request->request->get('company') ?? [];
++        $company      = $request->get('company') ?? [];
+         $updateSelect = InputHelper::clean(
+             'POST' === $method
+                 ? ($company['updateSelect'] ?? false)
+@@ -463,7 +458,6 @@ public function newAction(Request $request, $entity = null)
+         $returnUrl            = $this->generateUrl('mautic_company_index', $viewParameters);
+         $template             = 'MauticPlugin\LeuchtfeuerCompanyTagsBundle\Controller\CompanyController::indexAction';
+         $companyTagsStructure = $this->customFormCompanyTags($request, $entity);
+-
+         // /Check for a submitted form and process it
+         if ('POST' === $request->getMethod()) {
+             $valid = false;
+@@ -471,7 +465,7 @@ public function newAction(Request $request, $entity = null)
+                 if ($valid = $this->isFormValid($form)) {
+                     // form is valid so process the data
+                     // get custom field values
+-                    $data = $request->request->get('company');
++                    $data = $request->get('company');
+                     // pull the data from the form in order to apply the form's formatting
+                     foreach ($form as $f) {
+                         $data[$f->getName()] = $f->getData();
+@@ -505,7 +499,6 @@ public function newAction(Request $request, $entity = null)
+                     }
+                 }
+             }
+-
+             $passthrough = [
+                 'activeLink'    => '#mautic_company_index',
+                 'mauticContent' => 'company',
+@@ -672,7 +665,7 @@ private function customFormCompanyTags(Request $request, Company $company): arra
+     {
+         $requestData = [];
+         if ($request->request->has('custom_company')) {
+-            $requestData = $request->request->get('custom_company');
++            $requestData = $request->get('custom_company');
+         }
+ 
+         $requestToAdd    = $requestTags  = $requestData['tag'] ?? [];
+diff --git a/Controller/CompanyTagController.php b/Controller/CompanyTagController.php
+index b7bda11..71abb5b 100644
+--- a/Controller/CompanyTagController.php
++++ b/Controller/CompanyTagController.php
+@@ -4,7 +4,6 @@
+ 
+ use Doctrine\Persistence\ManagerRegistry;
+ use Mautic\CoreBundle\Controller\AbstractStandardFormController;
+-use Mautic\CoreBundle\Factory\MauticFactory;
+ use Mautic\CoreBundle\Factory\ModelFactory;
+ use Mautic\CoreBundle\Helper\CoreParametersHelper;
+ use Mautic\CoreBundle\Helper\UserHelper;
+@@ -29,7 +28,6 @@ public function __construct(
+         FormFactoryInterface $formFactory,
+         FormFieldHelper $fieldHelper,
+         ManagerRegistry $managerRegistry,
+-        MauticFactory $factory,
+         ModelFactory $modelFactory,
+         UserHelper $userHelper,
+         CoreParametersHelper $coreParametersHelper,
+@@ -39,9 +37,9 @@ public function __construct(
+         RequestStack $requestStack,
+         CorePermissions $security,
+         private CompanyTagModel $companyTagModel,
+-        private Config $config
++        private Config $config,
+     ) {
+-        parent::__construct($formFactory, $fieldHelper, $managerRegistry, $factory, $modelFactory, $userHelper, $coreParametersHelper, $dispatcher, $translator, $flashBag, $requestStack, $security);
++        parent::__construct($formFactory, $fieldHelper, $managerRegistry, $modelFactory, $userHelper, $coreParametersHelper, $dispatcher, $translator, $flashBag, $requestStack, $security);
+         if (!$this->config->isPublished()) {
+             throw new \RuntimeException('The plugin is not published');
+         }
+@@ -179,7 +177,7 @@ public function indexAction(Request $request, int $page = 1): RedirectResponse|J
+     public function newAction(Request $request): RedirectResponse|JsonResponse|Response
+     {
+         $response = $this->newStandard($request);
+-        if ( $response->isOk() ){
++        if ($response->isOk()) {
+             $this->addFlashMessage(
+                 'mautic.company_tags.return.message.save'
+             );
+@@ -258,14 +256,15 @@ public function viewAction(Request $request, ?int $objectId): RedirectResponse|J
+         ]);
+     }
+ 
++
+     /**
+-     * Override to customize redirect behavior after actions
++     * // @phpstan-ignore-next-line
+      */
+     protected function getPostActionRedirectArguments(array $args, $action): array
+     {
+-        if ($action === 'new' && isset($args['entity']) && $args['entity']->getId()) {
++        if ('new' === $action && isset($args['entity']) && $args['entity']->getId()) {
+             // Set custom route with parameters
+-            $args['returnUrl'] = $this->generateUrl('mautic_companytag_index');
++            $args['returnUrl']       = $this->generateUrl('mautic_companytag_index');
+             $args['contentTemplate'] = 'MauticPlugin\LeuchtfeuerCompanyTagsBundle\Controller\CompanyTagController::indexAction';
+         }
+ 
+diff --git a/Event/CompanyTagsEvent.php b/Event/CompanyTagsEvent.php
+index 559f398..6a99170 100644
+--- a/Event/CompanyTagsEvent.php
++++ b/Event/CompanyTagsEvent.php
+@@ -7,11 +7,17 @@
+ 
+ class CompanyTagsEvent extends CommonEvent
+ {
++    /**
++     * @param Company $company
++     * @param bool $isNew
++     * @param array<mixed> $tagsToAdd
++     * @param array<mixed> $tagsToRemove
++     */
+     public function __construct(
+         private Company $company,
+         protected $isNew = false,
+         private array $tagsToAdd = [],
+-        private array $tagsToRemove = []
++        private array $tagsToRemove = [],
+     ) {
+     }
+ 
+@@ -20,11 +26,17 @@ public function getCompany(): Company
+         return $this->company;
+     }
+ 
++    /**
++     * @return array<mixed>
++     */
+     public function getTagsToAdd(): array
+     {
+         return $this->tagsToAdd;
+     }
+ 
++    /**
++     * @return array<mixed>
++     */
+     public function getTagsToRemove(): array
+     {
+         return $this->tagsToRemove;
+@@ -35,6 +47,9 @@ public function isNew(): bool
+         return $this->isNew;
+     }
+ 
++    /**
++     * @return array<array<mixed>>
++     */
+     public function getTags(): array
+     {
+         return [
+diff --git a/Event/CompanyUpdateCompanyTagsEvent.php b/Event/CompanyUpdateCompanyTagsEvent.php
+index c590468..87994a4 100644
+--- a/Event/CompanyUpdateCompanyTagsEvent.php
++++ b/Event/CompanyUpdateCompanyTagsEvent.php
+@@ -7,10 +7,15 @@
+ 
+ class CompanyUpdateCompanyTagsEvent extends CommonEvent
+ {
++    /**
++     * @param Company $company
++     * @param array<mixed> $tagsToAdd
++     * @param array<mixed> $tagsToRemove
++     */
+     public function __construct(
+         private Company $company,
+         private array $tagsToAdd = [],
+-        private array $tagsToRemove = []
++        private array $tagsToRemove = [],
+     ) {
+     }
+ 
+@@ -19,11 +24,17 @@ public function getCompany(): Company
+         return $this->company;
+     }
+ 
++    /**
++     * @return array<mixed>
++     */
+     public function getTagsToAdd(): array
+     {
+         return $this->tagsToAdd;
+     }
+ 
++    /**
++     * @return array<mixed>
++     */
+     public function getTagsToRemove(): array
+     {
+         return $this->tagsToRemove;
+diff --git a/EventListener/ButtonSubscriber.php b/EventListener/ButtonSubscriber.php
+index 01cb9bc..ff2af27 100644
+--- a/EventListener/ButtonSubscriber.php
++++ b/EventListener/ButtonSubscriber.php
+@@ -7,7 +7,7 @@
+ use Mautic\CoreBundle\CoreEvents;
+ use Mautic\CoreBundle\Event\CustomButtonEvent;
+ use Mautic\CoreBundle\Twig\Helper\ButtonHelper;
+-use MauticPlugin\LeuchtfeuerCompanySegmentsBundle\Integration\Config;
++use MauticPlugin\LeuchtfeuerCompanyTagsBundle\Integration\Config;
+ use Symfony\Component\EventDispatcher\EventSubscriberInterface;
+ use Symfony\Component\Routing\RouterInterface;
+ use Symfony\Contracts\Translation\TranslatorInterface;
+diff --git a/Form/Type/CompanyTagType.php b/Form/Type/CompanyTagType.php
+index e3bb7ea..40509d1 100644
+--- a/Form/Type/CompanyTagType.php
++++ b/Form/Type/CompanyTagType.php
+@@ -14,7 +14,7 @@
+ class CompanyTagType extends AbstractType
+ {
+     public function __construct(
+-        private EntityManager $em
++        private EntityManager $em,
+     ) {
+     }
+ 
+@@ -37,6 +37,7 @@ public function configureOptions(OptionsResolver $resolver): void
+             [
+                 'label'           => 'mautic.company.tags',
+                 'class'           => CompanyTags::class,
++                /** @phpstan-ignore-next-line */
+                 'query_builder'   => fn (EntityRepository $er) => $er->createQueryBuilder('t')->orderBy('t.tag', \Doctrine\Common\Collections\Criteria::ASC),
+                 'choice_label'    => 'tag',
+                 'multiple'        => true,
+diff --git a/Form/Type/CustomCompanyType.php b/Form/Type/CustomCompanyType.php
+index f5224de..bb87b43 100644
+--- a/Form/Type/CustomCompanyType.php
++++ b/Form/Type/CustomCompanyType.php
+@@ -3,15 +3,13 @@
+ namespace MauticPlugin\LeuchtfeuerCompanyTagsBundle\Form\Type;
+ 
+ use Symfony\Component\Form\AbstractType;
+-use Symfony\Component\Form\AbstractTypeExtension;
+ use Symfony\Component\Form\FormBuilderInterface;
+ use Symfony\Contracts\Translation\TranslatorInterface;
+ 
+-// class CustomCompanyType extends AbstractTypeExtension
+ class CustomCompanyType extends AbstractType
+ {
+     public function __construct(
+-        protected TranslatorInterface $translator
++        protected TranslatorInterface $translator,
+     ) {
+     }
+ 
+diff --git a/Form/Type/ModifyCompanyTagsType.php b/Form/Type/ModifyCompanyTagsType.php
+index e1d5bb6..f97a7dc 100644
+--- a/Form/Type/ModifyCompanyTagsType.php
++++ b/Form/Type/ModifyCompanyTagsType.php
+@@ -12,7 +12,7 @@
+ class ModifyCompanyTagsType extends AbstractType
+ {
+     public function __construct(
+-        private TranslatorInterface $translator
++        private TranslatorInterface $translator,
+     ) {
+     }
+ 
+diff --git a/Model/CompanyTagModel.php b/Model/CompanyTagModel.php
+index 7820f8b..6ef4de3 100644
+--- a/Model/CompanyTagModel.php
++++ b/Model/CompanyTagModel.php
+@@ -48,7 +48,6 @@ public function getPermissionBase(): string
+      *
+      * @param object                              $entity
+      * @param \Symfony\Component\Form\FormFactory $formFactory
+-     * @param null                                $action
+      * @param array<mixed>                        $options
+      */
+     public function createForm($entity, $formFactory, $action = null, $options = []): FormInterface
+@@ -138,6 +137,8 @@ public function updateCompanyTags(Company $company, array $addCompanyTags = [],
+ 
+     /**
+      * @param array<Company> $companies
++     * @param array<CompanyTags> $addCompanyTags
++     * @param array<CompanyTags> $removeCompanyTags
+      */
+     public function updateCompaniesTags(array $companies, array $addCompanyTags = [], array $removeCompanyTags= []): void
+     {
+@@ -146,11 +147,16 @@ public function updateCompaniesTags(array $companies, array $addCompanyTags = []
+         }
+     }
+ 
++    /**
++     * @param array<CompanyTags> $addCompanyTags
++     * @param array<CompanyTags> $removeCompanyTags
++     * @param bool $isNew
++     */
+     private function companyCompanyTagDispatchEvent(
+         Company $company,
+         array $addCompanyTags = [],
+         array $removeCompanyTags = [],
+-        bool $isNew = false
++        bool $isNew = false,
+     ): ?Event {
+         $nameTrigger = LeuchtfeuerCompanyTagsEvents::COMPANYTAG_COMPANY_POS_UPDATE;
+ 
+diff --git a/Tests/Functional/Controller/AjaxControllerTest.php b/Tests/Functional/Controller/AjaxControllerTest.php
+index 87cedb5..2b2be02 100644
+--- a/Tests/Functional/Controller/AjaxControllerTest.php
++++ b/Tests/Functional/Controller/AjaxControllerTest.php
+@@ -27,9 +27,6 @@ public function setUp(): void
+     {
+         parent::setUp();
+         $this->activePlugin();
+-
+-        $this->useCleanupRollback = false;
+-        $this->setUpSymfony($this->configParams);
+         $this->tags    = $this->addCompanyTags();
+         $this->company = $this->addCompany($this->tags);
+     }
+diff --git a/Tests/Functional/Controller/Api/CompanyTagApiControllerTest.php b/Tests/Functional/Controller/Api/CompanyTagApiControllerTest.php
+index 40d63bf..e674f64 100644
+--- a/Tests/Functional/Controller/Api/CompanyTagApiControllerTest.php
++++ b/Tests/Functional/Controller/Api/CompanyTagApiControllerTest.php
+@@ -5,6 +5,7 @@
+ use Mautic\LeadBundle\Entity\Company;
+ use Mautic\PluginBundle\Entity\Integration;
+ use Mautic\PluginBundle\Entity\Plugin;
++use Mautic\UserBundle\Entity\User;
+ use MauticPlugin\LeuchtfeuerCompanySegmentsBundle\Tests\MauticMysqlTestCase;
+ use MauticPlugin\LeuchtfeuerCompanyTagsBundle\Entity\CompanyTags;
+ use MauticPlugin\LeuchtfeuerCompanyTagsBundle\Model\CompanyTagModel;
+@@ -55,6 +56,7 @@ private function activePlugin(bool $isPublished = true): void
+         $this->em->flush();
+         $this->useCleanupRollback = false;
+         $this->setUpSymfony($this->configParams);
++        $this->loginAdminUser();
+     }
+ 
+     private function addTag(string $name, string $description): CompanyTags
+@@ -301,7 +303,6 @@ public function testAddCompanyTagToCompany(): void
+         $newCompany->setName('Test Company 3');
+         $this->em->persist($newCompany);
+         $this->em->flush();
+-
+         $companyTag = $this->addTag('Test Company Tag 11', 'Test Company Tag Description 11');
+         $this->client->request(Request::METHOD_POST, "/api/companytags/{$newCompany->getId()}/add", ['tags' => [$companyTag->getId()]]);
+         $this->assertSame(Response::HTTP_OK, $this->client->getResponse()->getStatusCode());
+@@ -348,4 +349,11 @@ public function testRemoveCompanyTagFromCompany(): void
+         $this->assertSame($companyTag12->getTag(), $response['tags'][0]['tag']);
+         $this->assertCount(0, $response['tags'][0]['companies']);
+     }
++
++    private function loginAdminUser(): void
++    {
++        $user = $this->em->getRepository(User::class)->findOneBy(['username' => 'admin']);
++        assert($user instanceof User);
++        $this->loginUser($user);
++    }
+ }
+diff --git a/Tests/Functional/Controller/CompanyControllerTest.php b/Tests/Functional/Controller/CompanyControllerTest.php
+index 842f7d7..45eb08c 100644
+--- a/Tests/Functional/Controller/CompanyControllerTest.php
++++ b/Tests/Functional/Controller/CompanyControllerTest.php
+@@ -6,6 +6,7 @@
+ use Mautic\LeadBundle\Entity\Company;
+ use Mautic\PluginBundle\Entity\Integration;
+ use Mautic\PluginBundle\Entity\Plugin;
++use Mautic\UserBundle\Entity\User;
+ use MauticPlugin\LeuchtfeuerCompanyTagsBundle\Entity\CompanyTags;
+ use MauticPlugin\LeuchtfeuerCompanyTagsBundle\Model\CompanyTagModel;
+ 
+@@ -133,6 +134,7 @@ private function addCompanyTags(array $tags = []): array
+     private function activePlugin(bool $isPublished = true): void
+     {
+         $this->client->request('GET', '/s/plugins/reload');
++        $this->loginAdminUser();
+         $integration = $this->em->getRepository(Integration::class)->findOneBy(['name' => 'LeuchtfeuerCompanyTags']);
+         if (empty($integration)) {
+             $plugin      = $this->em->getRepository(Plugin::class)->findOneBy(['bundle' => 'LeuchtfeuerCompanyTagsBundle']);
+@@ -145,8 +147,7 @@ private function activePlugin(bool $isPublished = true): void
+         $this->em->getRepository(Integration::class)->saveEntity($integration);
+         $this->em->persist($integration);
+         $this->em->flush();
+-        $this->useCleanupRollback = false;
+-        $this->setUpSymfony($this->configParams);
++        $this->loginAdminUser();
+     }
+ 
+     public function testResearchBySameTagInTwoCompanies(): void
+@@ -272,17 +273,24 @@ public function testIfJsonIsReturned(): void
+         $this->assertStringContainsString('LeuchtfeuerCompanyTagsBundle/Assets/js/companyTag.js', $this->client->getResponse()->getContent());
+     }
+ 
+-    public function testSearchCompanySegment()
++    public function testSearchCompanySegment(): void
+     {
+         $company = $this->registerCompany('Test Company Segment', 'test@test.com');
+         $this->client->request('GET', '/s/companies?search=company-segment:comp-seg-2-companies');
+         $this->assertResponseStatusCodeSame(200);
+     }
+ 
+-    public function testSearchCompanySegmentNoColumn()
++    public function testSearchCompanySegmentNoColumn(): void
+     {
+         $company = $this->registerCompany('Test Company Segment', 'test@test.com');
+         $this->client->request('GET', '/s/companies?search=compan:comp-seg-2-companies');
+         $this->assertResponseStatusCodeSame(200);
+     }
++
++    private function loginAdminUser(): void
++    {
++        $user = $this->em->getRepository(User::class)->findOneBy(['username' => 'admin']);
++        assert($user instanceof User);
++        $this->loginUser($user);
++    }
+ }
+diff --git a/Tests/Functional/Controller/CompanyTagsControllerTest.php b/Tests/Functional/Controller/CompanyTagsControllerTest.php
+index 7487da6..32a18e7 100644
+--- a/Tests/Functional/Controller/CompanyTagsControllerTest.php
++++ b/Tests/Functional/Controller/CompanyTagsControllerTest.php
+@@ -5,6 +5,7 @@
+ use Mautic\CoreBundle\Test\MauticMysqlTestCase;
+ use Mautic\PluginBundle\Entity\Integration;
+ use Mautic\PluginBundle\Entity\Plugin;
++use Mautic\UserBundle\Entity\User;
+ use MauticPlugin\LeuchtfeuerCompanyTagsBundle\Entity\CompanyTags;
+ 
+ class CompanyTagsControllerTest extends MauticMysqlTestCase
+@@ -13,14 +14,20 @@ public function setUp(): void
+     {
+         parent::setUp();
+         $this->activePlugin();
+-        $this->useCleanupRollback = false;
+-        $this->setUpSymfony($this->configParams);
++        $this->loginAdminUser();
++    }
++
++    private function loginAdminUser(): void
++    {
++        $user = $this->em->getRepository(User::class)->findOneBy(['username' => 'admin']);
++        assert($user instanceof User);
++        $this->loginUser($user);
+     }
+ 
+     public function testNewViewAction(): void
+     {
+         $this->client->request('GET', '/s/companytag/new');
+-        $this->assertResponseStatusCodeSame(200);
++        self::assertResponseStatusCodeSame(200);
+     }
+ 
+     public function testNewAction(): void
+diff --git a/Tests/Functional/Entity/EntityCompanyTagsTest.php b/Tests/Functional/Entity/EntityCompanyTagsTest.php
+index 953a0e7..77b59ab 100644
+--- a/Tests/Functional/Entity/EntityCompanyTagsTest.php
++++ b/Tests/Functional/Entity/EntityCompanyTagsTest.php
+@@ -76,8 +76,6 @@ public function testRemoveCompany(): void
+         $this->assertNotContains($company, $companyTag->getCompanies());
+     }
+ 
+-    //    public function testCh
+-
+     private function activePlugin(bool $isPublished = true): void
+     {
+         $this->client->request('GET', '/s/plugins/reload');
+diff --git a/Tests/Functional/EventLister/CampaignSubscriberTest.php b/Tests/Functional/EventLister/CampaignSubscriberTest.php
+index a09e6a2..d57bd84 100644
+--- a/Tests/Functional/EventLister/CampaignSubscriberTest.php
++++ b/Tests/Functional/EventLister/CampaignSubscriberTest.php
+@@ -24,7 +24,7 @@ public function setUp(): void
+ 
+     public function testModifyCompanyTagsInCampaign(): void
+     {
+-        $companyTagModel = self::$container->get('mautic.companytag.model.companytag');
++        $companyTagModel = self::getContainer()->get('mautic.companytag.model.companytag');
+ 
+         /**
+          * ADD Lead
+@@ -159,7 +159,7 @@ public function testModifyCompanyTagsInCampaign(): void
+ 
+     public function testModifyCompanyTagsWithoutTagsFromScratch(): void
+     {
+-        $companyTagModel = self::$container->get('mautic.companytag.model.companytag');
++        $companyTagModel = self::getContainer()->get('mautic.companytag.model.companytag');
+ 
+         /**
+          * ADD Lead
+diff --git a/Tests/Functional/Permissions/CompanyTagPermissionsTest.php b/Tests/Functional/Permissions/CompanyTagPermissionsTest.php
+index edbad4b..65cfe46 100644
+--- a/Tests/Functional/Permissions/CompanyTagPermissionsTest.php
++++ b/Tests/Functional/Permissions/CompanyTagPermissionsTest.php
+@@ -14,6 +14,7 @@
+ use MauticPlugin\LeuchtfeuerCompanyTagsBundle\Model\CompanyTagModel;
+ use Symfony\Component\HttpFoundation\Request;
+ use Symfony\Component\HttpFoundation\Response;
++use Symfony\Component\PasswordHasher\PasswordHasherInterface;
+ 
+ class CompanyTagPermissionsTest extends MauticMysqlTestCase
+ {
+@@ -38,8 +39,7 @@ private function activePlugin(bool $isPublished = true): void
+         $this->em->getRepository(Integration::class)->saveEntity($integration);
+         $this->em->persist($integration);
+         $this->em->flush();
+-        $this->useCleanupRollback = false;
+-        $this->setUpSymfony($this->configParams);
++        $this->loginAdminUser();
+     }
+ 
+     public function testCheckPermissionIsEnable(): void
+@@ -148,8 +148,7 @@ public function testNewUserWithRoleAccesingWithNoPermissionFailCompanyTagsPage()
+ 
+         // Disable the default logging in via username and password.
+         $this->clientServer = [];
+-        $this->setUpSymfony($this->configParams);
+-        $this->loginUser($user->getUserIdentifier());
++        $this->loginUser($user);
+         $this->client->setServerParameter('PHP_AUTH_USER', $user->getUserIdentifier());
+         $this->client->setServerParameter('PHP_AUTH_PW', $password);
+ 
+@@ -318,8 +317,7 @@ private function newLogin(User $user, string $password): void
+     {
+         // Disable the default logging in via username and password.
+         $this->clientServer = [];
+-        $this->setUpSymfony($this->configParams);
+-        $this->loginUser($user->getUserIdentifier());
++        $this->loginUser($user);
+         $this->client->setServerParameter('PHP_AUTH_USER', $user->getUserIdentifier());
+         $this->client->setServerParameter('PHP_AUTH_PW', $password);
+     }
+@@ -379,8 +377,12 @@ private function createUser(Role $role, string $password='Maut1cR0cks', string $
+         $user->setLastName('Doe');
+         $user->setUsername($userName);
+         $user->setEmail($userName.'@mautic.com');
+-        $encoder = static::getContainer()->get('security.encoder_factory')->getEncoder($user);
+-        $user->setPassword($encoder->encodePassword($password, null));
++        $encoderFactory = self::getContainer()->get('security.password_hasher_factory');
++        if (method_exists($encoderFactory, 'getPasswordHasher')) {
++            $hasher         = $encoderFactory->getPasswordHasher($user);
++            \assert($hasher instanceof PasswordHasherInterface);
++            $user->setPassword($hasher->hash($password));
++        }
+         $user->setRole($role);
+ 
+         $this->em->persist($user);
+@@ -401,4 +403,11 @@ private function createRole(bool $isAdmin = false): Role
+ 
+         return $role;
+     }
++
++    private function loginAdminUser(): void
++    {
++        $user = $this->em->getRepository(User::class)->findOneBy(['username' => 'admin']);
++        assert($user instanceof User);
++        $this->loginUser($user);
++    }
+ }
